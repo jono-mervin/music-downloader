@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LUKA MP3 Professional | High-Speed Downloader</title>
+    <!-- Aggressive Anti-Cache Meta Tags -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=3.0.0">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&display=swap"
+        rel="stylesheet">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='luka.png') }}">
+
+    <style>
+        /* Embedded critical fixes to ensure no placeholders show up initially */
+        .hidden {
+            display: none !important;
+        }
+
+        #status-card h3,
+        #status-card p,
+        #modal-title,
+        #modal-uploader {
+            min-height: 1.2em;
+        }
+
+        /* Ensure the v2 header looks great */
+        .version-badge {
+            background: var(--primary-gradient);
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 6px;
+            vertical-align: middle;
+            margin-left: 10px;
+            letter-spacing: 1px;
+            box-shadow: 0 0 15px rgba(110, 0, 255, 0.4);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="mesh-bg"></div>
+    <canvas id="bg-canvas"></canvas>
+
+    <div class="container">
+        <header>
+            <div class="header-logo">
+                <img src="{{ url_for('static', filename='luka.png') }}" alt="LUKA Logo" id="luka-logo">
+                <h1>LUKA <span class="accent">MP3</span></h1>
+            </div>
+            <p>The world's most elegant way to capture your favorite sounds.</p>
+        </header>
+
+        <main>
+            <div class="search-box">
+                <div class="input-glow"></div>
+                <input type="text" id="url-input" placeholder="Paste YouTube or Spotify URL..." autocomplete="off">
+                <button id="download-btn">Extract Audio</button>
+            </div>
+
+            <div id="status-card" class="card hidden">
+                <div class="thumbnail skeleton" id="thumb-container">
+                    <img id="song-thumb" src="" alt="" referrerpolicy="no-referrer">
+                    <div class="duration" id="song-duration"></div>
+                </div>
+                <div class="info" id="info-container">
+                    <h3 id="song-title"></h3>
+                    <p id="song-uploader"></p>
+                    <!-- Loading state elements -->
+                    <div id="skeleton-info" class="hidden">
+                        <div class="skeleton skeleton-text long"></div>
+                        <div class="skeleton skeleton-text short"></div>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-inner" id="progress-bar"></div>
+                    </div>
+                    <p id="status-text">Ready to download...</p>
+                </div>
+            </div>
+
+            <div id="error-message" class="error hidden"
+                style="background: rgba(255, 75, 75, 0.1); border: 1px solid #ff4b4b; padding: 15px; border-radius: 12px; margin-top: 20px; color: #ff4b4b;">
+            </div>
+
+        </main>
+
+        <footer>
+            <p>&copy; 2026 Jono Projects. All rights reserved.</p>
+        </footer>
+
+        <!-- Confirmation Modal -->
+        <div id="confirmation-modal" class="modal-overlay hidden">
+            <div class="modal-content">
+                <div class="modal-glow"></div>
+                <h2>Confirm Download</h2>
+                <div class="modal-preview">
+                    <div class="img-wrapper">
+                        <img id="modal-thumb" src="" alt="Thumbnail" referrerpolicy="no-referrer">
+                    </div>
+                    <div class="modal-info">
+                        <h3 id="modal-title"></h3>
+                        <p id="modal-uploader"></p>
+                    </div>
+                </div>
+                <p class="modal-question" style="margin-bottom: 30px;">Is this the song you want to convert to MP3?</p>
+                <div class="modal-actions">
+                    <button id="modal-cancel-btn" class="btn-secondary">Cancel</button>
+                    <button id="modal-confirm-btn" class="btn-primary">Yes, Download</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- EMBEDDED SCRIPT TO BYPASS CACHING GLITCHES -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log("LUKA MP3 Professional Initializing...");
+
+            const urlInput = document.getElementById('url-input');
+            const downloadBtn = document.getElementById('download-btn');
+            const statusCard = document.getElementById('status-card');
+            const songThumb = document.getElementById('song-thumb');
+            const songTitle = document.getElementById('song-title');
+            const songUploader = document.getElementById('song-uploader');
+            const songDuration = document.getElementById('song-duration');
+            const progressBar = document.getElementById('progress-inner') || document.getElementById('progress-bar');
+            const statusText = document.getElementById('status-text');
+            const errorMessage = document.getElementById('error-message');
+
+            const confirmationModal = document.getElementById('confirmation-modal');
+            const modalThumb = document.getElementById('modal-thumb');
+            const modalTitle = document.getElementById('modal-title');
+            const modalUploader = document.getElementById('modal-uploader');
+            const modalCancelBtn = document.getElementById('modal-cancel-btn');
+            const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+
+            let currentUrl = '';
+            let currentTitle = '';
+
+            function resetUI() {
+                statusCard.classList.add('hidden');
+                errorMessage.classList.add('hidden');
+                if (progressBar) progressBar.style.width = '0%';
+                statusText.textContent = 'Ready to download...';
+                statusText.style.color = '';
+
+                songTitle.textContent = '';
+                songUploader.textContent = '';
+                modalTitle.textContent = '';
+                modalUploader.textContent = '';
+                songThumb.src = '';
+                modalThumb.src = '';
+                
+                // Reset loading states
+                document.getElementById('skeleton-info').classList.add('hidden');
+                songTitle.classList.remove('hidden');
+                songUploader.classList.remove('hidden');
+                document.getElementById('thumb-container').classList.remove('skeleton');
+            }
+
+            downloadBtn.addEventListener('click', async () => {
+                const url = urlInput.value.trim();
+                if (!url) return;
+
+                resetUI();
+                currentUrl = url;
+                downloadBtn.disabled = true;
+                downloadBtn.textContent = 'Analyzing...';
+
+                statusCard.classList.remove('hidden');
+                
+                // Activate Loading State
+                document.getElementById('thumb-container').classList.add('skeleton');
+                songTitle.classList.add('hidden');
+                songUploader.classList.add('hidden');
+                document.getElementById('skeleton-info').classList.remove('hidden');
+                songThumb.classList.add('hidden');
+                if (songDuration) songDuration.classList.add('hidden');
+
+                try {
+                    const response = await fetch('/api/info', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url })
+                    });
+
+                    const info = await response.json();
+                    if (info.error) throw new Error(info.error);
+
+                    // Deactivate Loading State
+                    document.getElementById('thumb-container').classList.remove('skeleton');
+                    songTitle.classList.remove('hidden');
+                    songUploader.classList.remove('hidden');
+                    document.getElementById('skeleton-info').classList.add('hidden');
+                    songThumb.classList.remove('hidden');
+                    if (songDuration) songDuration.classList.remove('hidden');
+
+                    currentTitle = info.title || 'Video Download';
+                    const uploader = info.uploader || 'YouTube';
+                    const thumbnail = info.thumbnail || '';
+
+                    songTitle.textContent = currentTitle;
+                    songUploader.textContent = uploader;
+                    songThumb.src = thumbnail;
+                    if (songDuration) songDuration.textContent = formatDuration(info.duration);
+
+                    modalTitle.textContent = currentTitle;
+                    modalUploader.textContent = uploader;
+                    modalThumb.src = thumbnail;
+
+                    confirmationModal.classList.remove('hidden');
+                    downloadBtn.textContent = 'Extract Audio';
+                    downloadBtn.disabled = false;
+                } catch (err) {
+                    console.error(err);
+                    errorMessage.textContent = "Error: " + err.message;
+                    errorMessage.classList.remove('hidden');
+                    downloadBtn.disabled = false;
+                    downloadBtn.textContent = 'Extract Audio';
+                }
+            });
+
+            modalConfirmBtn.addEventListener('click', async () => {
+                confirmationModal.classList.add('hidden');
+                statusText.textContent = 'Starting conversion...';
+                downloadBtn.disabled = true;
+                downloadBtn.textContent = 'Downloading...';
+                if (progressBar) progressBar.style.width = '30%';
+
+                try {
+                    const response = await fetch('/api/download', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: currentUrl })
+                    });
+
+                    if (!response.ok) {
+                        const err = await response.json();
+                        throw new Error(err.error || 'Download failed');
+                    }
+
+                    if (progressBar) progressBar.style.width = '100%';
+                    statusText.textContent = 'Success! Enjoy your music.';
+                    statusText.style.color = '#00ff88';
+
+                    const blob = await response.blob();
+                    const dUrl = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = dUrl;
+                    a.download = (currentTitle || 'audio').replace(/[\\\/:*?"<>|]/g, '_') + '.mp3';
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(dUrl);
+
+                    setTimeout(() => {
+                        downloadBtn.disabled = false;
+                        downloadBtn.textContent = 'Extract Audio';
+                    }, 2000);
+                } catch (err) {
+                    errorMessage.textContent = "Conversion failed: " + err.message;
+                    errorMessage.classList.remove('hidden');
+                    downloadBtn.disabled = false;
+                    downloadBtn.textContent = 'Extract Audio';
+                }
+            });
+
+            modalCancelBtn.addEventListener('click', () => {
+                confirmationModal.classList.add('hidden');
+                resetUI();
+            });
+
+            function formatDuration(sec) {
+                if (!sec) return '0:00';
+                const m = Math.floor(sec / 60);
+                const s = Math.floor(sec % 60);
+                return m + ":" + s.toString().padStart(2, '0');
+            }
+
+            // Simple wave background
+            const canvas = document.getElementById('bg-canvas');
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                let w, h, hue = 0;
+                function res() { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; }
+                window.addEventListener('resize', res);
+                res();
+                function drw() {
+                    hue = (hue + 0.5) % 360;
+                    document.documentElement.style.setProperty('--color-1', `hsl(${hue}, 70%, 50%)`);
+                    document.documentElement.style.setProperty('--color-2', `hsl(${(hue + 60) % 360}, 80%, 40%)`);
+                    ctx.clearRect(0, 0, w, h);
+                    ctx.fillStyle = `hsla(${hue}, 70%, 50%, 0.1)`;
+                    for (let i = 0; i < w; i += 20) {
+                        const bh = Math.sin(i * 0.01 + hue * 0.05) * 50 + 100;
+                        ctx.fillRect(i, h - bh, 18, bh);
+                    }
+                    requestAnimationFrame(drw);
+                }
+                drw();
+            }
+        });
+    </script>
+</body>
+
+</html>
